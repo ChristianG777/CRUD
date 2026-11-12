@@ -30,7 +30,7 @@ class MainActivity : AppCompatActivity() {
         dbHelper = FeedReaderDbHelper(this)
 
         findViewById<View>(R.id.btn_actualizar).setOnClickListener { actualizar() }
-        findViewById<View>(R.id.btn_eliminar).setOnClickListener { confirmarEliminacion() }
+        findViewById<View>(R.id.btn_eliminar).setOnClickListener { Eliminar(it) }
     }
 
     // ---------- Navegacion ----------
@@ -81,7 +81,7 @@ class MainActivity : AppCompatActivity() {
         val selection = "${BaseColumns._ID} = ?"
         val selectionArgs = arrayOf(id)
 
-        db.query(
+        val cursor = db.query(
             FeedReaderContract.FeedEntry.TABLE_NAME,
             projection,
             selection,
@@ -89,7 +89,9 @@ class MainActivity : AppCompatActivity() {
             null,
             null,
             null
-        ).use { cursor ->
+        )
+
+        try {
             if (cursor.moveToFirst()) {
                 txtnombre.setText(cursor.getString(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_NOMBRE)))
                 txtapellido.setText(cursor.getString(cursor.getColumnIndexOrThrow(FeedReaderContract.FeedEntry.COLUMN_NAME_APELLIDO)))
@@ -98,6 +100,8 @@ class MainActivity : AppCompatActivity() {
                 txtapellido.setText("")
                 mostrarMensaje("No existe un registro con Id = $id")
             }
+        } finally {
+            cursor.close()
         }
     }
 
@@ -129,56 +133,50 @@ class MainActivity : AppCompatActivity() {
 
         if (count > 0) {
             mostrarMensaje("Se actualizó $count registro(s)")
-            limpiarFormulario()
+            limpiarCampos()
         } else {
             mostrarMensaje("No se pudo actualizar el registro")
         }
     }
 
-    private fun confirmarEliminacion() {
+    // ---------- DELETE ----------
+    fun Eliminar(vista: View) {
         val id = leerId() ?: return
-        AlertDialog.Builder(this)
-            .setTitle("Eliminar registro")
-            .setMessage("¿Quieres eliminar el registro #$id?")
-            .setNegativeButton("Cancelar", null)
-            .setPositiveButton("Eliminar") { _, _ -> eliminar(id) }
-            .show()
-    }
 
-    private fun eliminar(id: String) {
-        try {
-            val deleted = dbHelper.writableDatabase.delete(FeedReaderContract.FeedEntry.TABLE_NAME, "${BaseColumns._ID} = ?", arrayOf(id))
-            limpiarFormulario()
-            mostrarMensaje(if (deleted > 0) "Registro eliminado" else "El registro ya no existe")
-        } catch (error: SQLiteException) {
-            mostrarMensaje("No se pudo eliminar el registro")
+        val db = dbHelper.writableDatabase
+        val selection = "${BaseColumns._ID} = ?"
+        val selectionArgs = arrayOf(id)
+
+        val deletedRows = db.delete(
+            FeedReaderContract.FeedEntry.TABLE_NAME,
+            selection,
+            selectionArgs
+        )
+
+        if (deletedRows > 0) {
+            limpiarCampos()
         }
+        mostrarMensaje("Se eliminó $deletedRows registro(s)")
     }
 
+    /** Devuelve el Id escrito, o null (y avisa) si el campo está vacío. */
     private fun leerId(): String? {
         val id = txtid.text.toString().trim()
-        try {
-            if (id.toLong() > 0) {
-                return id
-            }
-        } catch (error: NumberFormatException) {
-            // Error de formato numérico
+        if (id.isEmpty()) {
+            mostrarMensaje("Ingrese el Id del registro")
+            return null
         }
-        txtid.error = "Escribe un ID válido del listado"
-        txtid.requestFocus()
-        return null
+        return id
     }
 
-    private fun limpiarFormulario() {
+    private fun limpiarCampos() {
         txtid.setText("")
         txtnombre.setText("")
         txtapellido.setText("")
-        txtnombre.error = null
-        txtapellido.error = null
     }
 
     private fun mostrarMensaje(mensaje: String) {
-        Toast.makeText(this, mensaje, Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, mensaje, Toast.LENGTH_LONG).show()
     }
 
     override fun onDestroy() {
